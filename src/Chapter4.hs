@@ -42,6 +42,7 @@ Perfect. Let's crush this!
 
 module Chapter4 where
 
+import Control.Applicative (Applicative (liftA2))
 {- |
 =🛡= Kinds
 
@@ -670,7 +671,21 @@ Can you implement a monad version of AND, polymorphic over any monad?
 -}
 andM :: (Monad m) => m Bool -> m Bool -> m Bool
 andM a b = fmap (&&) a <*> b -- only needs applicative
--- andM x y=(x >>= (\a -> pure (&& a)))<*>y -- follows hint but quite ugly
+
+andM2 :: (Monad m) => m Bool -> m Bool -> m Bool
+andM2 x y=(x >>= (\a -> pure (&& a)))<*>y -- follows hint but quite ugly
+
+andM3 :: (Monad m) => m Bool -> m Bool -> m Bool
+andM3 = liftA2 (&&) -- kind of cheating...
+
+-- >>> andM (Just False) Nothing
+-- Nothing
+
+-- >>> andM2 (Just False) Nothing
+-- Nothing
+
+-- >>> andM3 (Just False) (Nothing)
+-- Nothing
 
 {- |
 =🐉= Task 9*: Final Dungeon Boss
