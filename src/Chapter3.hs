@@ -992,13 +992,12 @@ instance Append Gold where
   append (Gold g) (Gold h) = Gold $ g+h
 
 instance Append [a] where
-  append l1 l2 = l1 ++ l2
+  append = (++) 
 
 instance (Append a) => Append (Maybe a) where
   append (Just m1) (Just m2) = Just $ append m1 m2
-  append (Just m1) _ = Just m1
-  append _ (Just m2) = Just m2
-  append _ _ = Nothing
+  append Nothing m = m
+  append m Nothing = m
 
 {- |
 =🛡= Standard Typeclasses and Deriving
@@ -1058,20 +1057,26 @@ implement the following functions:
 
 🕯 HINT: to implement this task, derive some standard typeclasses
 -}
-data WeekDay = Sunday|Monday|Tuesday|Wednesday|Thursday|Friday|Saturday deriving (Show,Read,Eq,Ord,Enum)
+data WeekDay = 
+  Sunday
+  |Monday
+  |Tuesday
+  |Wednesday
+  |Thursday
+  |Friday
+  |Saturday deriving (Show,Read,Eq,Ord,Enum,Bounded)
 
 isWeekend::WeekDay->Bool
-isWeekend d 
-  | d == Sunday || d == Saturday = True
-  | otherwise = False
+isWeekend d = d == Sunday || d == Saturday 
 
 nextDay :: WeekDay->WeekDay
-nextDay Saturday = Sunday
-nextDay d = toEnum $ fromEnum d + 1
+nextDay d 
+  | d== maxBound = minBound
+  | otherwise = succ d
 
 daysToParty:: WeekDay->Int
 daysToParty Friday = 0
-daysToParty d = 1 + daysToParty ( nextDay d) -- (daysToParty Saturday) == 6 -- but that's the spec
+daysToParty d = mod (fromEnum Friday - fromEnum d) 7 -- (daysToParty Saturday) == 6 -- but that's the spec
 
 
 {-
@@ -1165,12 +1170,15 @@ castSpellAction k (Spell strength) = k {fkdefence=strength+fkdefence k}
 --                         or battle:: (Fighter a,Fighter b) => a->b->c -- failed, can't guess what C would be bound to
 -- I do like Either, it's the real thing
 -- would have been interesting to add run (and then either is not a solution), potions and spells, but make little sense without random numbers and demand some sort of strategy
-battle:: (Fighter a,Fighter b) => a->b->Either a b
+data FightResult attacker target =
+  AttackerWins attacker
+  |TargetWins target
+battle:: (Fighter a,Fighter b) => a->b->FightResult a b
 battle attacker target = go attacker target False
   where
     go a t swapped
-      | health t < 0 = Left a
-      | swapped && health a < 0 = Right t
+      | health t < 0 = AttackerWins a
+      | swapped && health a < 0 = TargetWins t
       | swapped = go  (attackAction t a) t False
       | otherwise = go  a (attackAction a t) True
 
