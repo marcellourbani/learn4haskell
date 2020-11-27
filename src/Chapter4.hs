@@ -697,17 +697,12 @@ Can you implement a monad version of AND, polymorphic over any monad?
 -- anyway translating the do notation works and is more compact, maybe less elegant
 -- PS: pure works too, but I think return is more appropriate
 andM :: (Monad m) => m Bool -> m Bool -> m Bool
-andM a b = a >>= \x ->
-  if x then
-    b >>= \y -> return $ x && y
-  else a
+andM a b = a >>= \x -> if x then b else a
 
 andM2 :: (Monad m) => m Bool -> m Bool -> m Bool
 andM2 a b = do
   x <- a
-  if x then do
-    y <- b
-    return (x && y)
+  if x then b
   else return False
 
 
