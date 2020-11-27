@@ -506,14 +506,41 @@ Implement the 'Applicative' instance for our 'List' type.
   type.
 -}
 
--- Note to reviewers: if length don't matchthis will stop at the shortest length. Not ideal but looks the least surprising
+-- like it better than concatenate
+(+++):: List a -> List a ->List a
+Empty +++ l       = l
+(Cons x xs) +++ l = Cons x (xs +++ l)
+
+-- This version should respect monad laws
 instance Applicative List where
   pure:: a -> List a
   pure a = Cons a Empty
+
   (<*>):: List (a->b) -> List a -> List b
-  (<*>) Empty _                 = Empty
-  (<*>) _ Empty                 = Empty
-  (<*>) (Cons f fs) (Cons a as) = Cons (f a) (fs <*> as)
+  Empty <*> _       = Empty
+  _ <*>  Empty      = Empty
+  (Cons f fs) <*> l = fmap f l +++ (fs  <*> l)
+
+
+-- tried  the newtype alternate instance trick
+-- like [] and ZipList, Mist can be a monad, MyZipList can't
+newtype MyZipList a = MyZipList (List a)
+
+k :: MyZipList Int
+k = MyZipList Empty
+
+instance Functor MyZipList where
+  fmap:: (a->b) -> MyZipList a -> MyZipList b
+  fmap f (MyZipList l) = MyZipList $ fmap f l
+
+instance Applicative MyZipList where
+  pure:: a -> MyZipList a
+  pure a = MyZipList (Cons a Empty)
+
+  (<*>):: MyZipList (a->b) -> MyZipList a -> MyZipList b
+  (<*>) (MyZipList Empty) _                             = MyZipList Empty
+  (<*>) _ (MyZipList Empty)                             = MyZipList Empty
+  (<*>) (MyZipList (Cons f fs)) (MyZipList (Cons a as)) = MyZipList $Cons (f a) (fs <*> as)
 
 {- |
 =🛡= Monad
@@ -638,20 +665,16 @@ Implement the 'Monad' instance for our lists.
   maybe a few) to flatten lists of lists to a single list.
 -}
 
+-- in hindsight, flatten is generic enough to stay at the top level
+flatten :: List (List a) -> List a
+flatten list = case list of
+  Empty     -> Empty
+  Cons x xs -> x +++ flatten xs
 
 instance Monad List where
-  (>>=) :: List a -> (a->List b)->List b
+  (>>=) :: List a -> (a -> List b) -> List b
   Empty >>= _ = Empty
   l >>= f     = flatten (fmap f l)
-    where
-      concatenate:: List a -> List a -> List a
-      concatenate l1 l2 = case l1 of
-        Empty     -> l2
-        Cons x xs -> Cons x (concatenate xs l2)
-      flatten:: List(List a)->List a
-      flatten list = case list of
-        Empty     -> Empty
-        Cons x xs -> concatenate x (flatten xs)
 
 {- |
 =💣= Task 8*: Before the Final Boss
@@ -669,23 +692,34 @@ Can you implement a monad version of AND, polymorphic over any monad?
 
 🕯 HINT: Use "(>>=)", "pure" and anonymous function
 -}
+
+-- couldn't figure out how to do it without do notation below :(
+-- anyway translating the do notation works and is more compact, maybe less elegant
+-- PS: pure works too, but I think return is more appropriate
 andM :: (Monad m) => m Bool -> m Bool -> m Bool
-andM a b = fmap (&&) a <*> b -- only needs applicative
+andM a b = a >>= \x ->
+  if x then
+    b >>= \y -> return $ x && y
+  else a
 
 andM2 :: (Monad m) => m Bool -> m Bool -> m Bool
-andM2 x y=(x >>= (\a -> pure (&& a)))<*>y -- follows hint but quite ugly
+andM2 a b = do
+  x <- a
+  if x then do
+    y <- b
+    return (x && y)
+  else return False
 
-andM3 :: (Monad m) => m Bool -> m Bool -> m Bool
-andM3 = liftA2 (&&) -- kind of cheating...
 
--- >>> andM (Just False) Nothing
--- Nothing
 
 -- >>> andM2 (Just False) Nothing
+-- Just False
+
+-- >>> andM Nothing (Just False)
 -- Nothing
 
--- >>> andM3 (Just False) (Nothing)
--- Nothing
+-- >>> andM (Just True) (Just False)
+-- Just False
 
 {- |
 =🐉= Task 9*: Final Dungeon Boss
@@ -744,7 +778,22 @@ btreeToList :: BTree a -> [a]
 btreeToList (BTree v l r) = go l ++ v:go r
   where go Nothing  = []
         go (Just t) = btreeToList t
+data Tree a
+    = EmptyTree
+    | Node (Tree a) a (Tree a)
 
+instance Functor Tree where
+  fmap:: (a->b)->Tree a ->Tree b
+  fmap _ EmptyTree           = EmptyTree
+  fmap f (Node left x right) = Node (fmap f left) (f x) (fmap f right)
+
+reverseTree2 :: Tree a -> Tree a
+reverseTree2 EmptyTree           = EmptyTree
+reverseTree2 (Node left x right) = Node (reverseTree2 right) x (reverseTree2 left)
+
+treeToList :: Tree a -> [a]
+treeToList EmptyTree           = []
+treeToList (Node left x right) = treeToList left++ x : treeToList right
 {-
 You did it! Now it is time to open pull request with your changes
 and summon @vrom911 and @chshersh for the review!
