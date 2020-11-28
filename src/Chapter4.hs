@@ -694,8 +694,7 @@ Can you implement a monad version of AND, polymorphic over any monad?
 -}
 
 -- couldn't figure out how to do it without do notation below :(
--- anyway translating the do notation works and is more compact, maybe less elegant
--- PS: pure works too, but I think return is more appropriate
+-- anyway translating the do notation and refactoring worked
 andM :: (Monad m) => m Bool -> m Bool -> m Bool
 andM a b = a >>= \x -> if x then b else a
 
