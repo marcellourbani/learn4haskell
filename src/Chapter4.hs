@@ -42,6 +42,7 @@ Perfect. Let's crush this!
 
 module Chapter4 where
 
+import Control.Applicative (Applicative (liftA2))
 {- |
 =🛡= Kinds
 
@@ -114,23 +115,23 @@ As always, try to guess the output first! And don't forget to insert
 the output in here:
 
 >>> :k Char
-
+Char :: *
 >>> :k Bool
-
+Bool :: *
 >>> :k [Int]
-
+[Int] :: *
 >>> :k []
-
+[] :: * -> *
 >>> :k (->)
-
+(->) :: * -> * -> *
 >>> :k Either
-
+Either :: * -> * -> *
 >>> data Trinity a b c = MkTrinity a b c
 >>> :k Trinity
-
+Trinity :: * -> * -> * -> *
 >>> data IntBox f = MkIntBox (f Int)
 >>> :k IntBox
-
+IntBox :: (* -> *) -> *
 -}
 
 {- |
@@ -266,6 +267,8 @@ instance Functor Maybe where
     fmap f (Just a) = Just (f a)
     fmap _ x = x
 @
+
+Doesn't compile because x is Nothing of type Maybe a, not a Maybe b.
 -}
 
 {- |
@@ -293,7 +296,13 @@ values and apply them to the type level?
 -}
 instance Functor (Secret e) where
     fmap :: (a -> b) -> Secret e a -> Secret e b
-    fmap = error "fmap for Box: not implemented!"
+    fmap f r = case r of
+      Reward a -> Reward (f a)
+      Trap e   -> Trap e
+-- Question for reviewers: why does the linter complain about unexaustive pattern in guard version below?
+    -- fmap
+    --   | f (Reward a) = Reward (f a)
+    --   | _ (Trap e)   = Trap e
 
 {- |
 =⚔️= Task 3
@@ -306,6 +315,12 @@ typeclasses for standard data types.
 data List a
     = Empty
     | Cons a (List a)
+
+instance Functor List where
+  fmap:: (a->b) -> List a -> List b
+  fmap f l = case l of
+    Empty     -> Empty
+    Cons x xs -> Cons (f x) (fmap f xs)
 
 {- |
 =🛡= Applicative
@@ -472,10 +487,12 @@ Implement the Applicative instance for our 'Secret' data type from before.
 -}
 instance Applicative (Secret e) where
     pure :: a -> Secret e a
-    pure = error "pure Secret: Not implemented!"
+    pure = Reward
 
     (<*>) :: Secret e (a -> b) -> Secret e a -> Secret e b
-    (<*>) = error "(<*>) Secret: Not implemented!"
+    (<*>) e a = case e of
+      Reward f -> fmap f a
+      Trap t   -> Trap t
 
 {- |
 =⚔️= Task 5
@@ -489,6 +506,41 @@ Implement the 'Applicative' instance for our 'List' type.
   type.
 -}
 
+-- like it better than concatenate
+(+++):: List a -> List a ->List a
+Empty +++ l       = l
+(Cons x xs) +++ l = Cons x (xs +++ l)
+
+-- This version should respect monad laws
+instance Applicative List where
+  pure:: a -> List a
+  pure a = Cons a Empty
+
+  (<*>):: List (a->b) -> List a -> List b
+  Empty <*> _       = Empty
+  _ <*>  Empty      = Empty
+  (Cons f fs) <*> l = fmap f l +++ (fs  <*> l)
+
+
+-- tried  the newtype alternate instance trick
+-- like [] and ZipList, Mist can be a monad, MyZipList can't
+newtype MyZipList a = MyZipList (List a)
+
+k :: MyZipList Int
+k = MyZipList Empty
+
+instance Functor MyZipList where
+  fmap:: (a->b) -> MyZipList a -> MyZipList b
+  fmap f (MyZipList l) = MyZipList $ fmap f l
+
+instance Applicative MyZipList where
+  pure:: a -> MyZipList a
+  pure a = MyZipList (Cons a Empty)
+
+  (<*>):: MyZipList (a->b) -> MyZipList a -> MyZipList b
+  (<*>) (MyZipList Empty) _                             = MyZipList Empty
+  (<*>) _ (MyZipList Empty)                             = MyZipList Empty
+  (<*>) (MyZipList (Cons f fs)) (MyZipList (Cons a as)) = MyZipList $Cons (f a) (fs <*> as)
 
 {- |
 =🛡= Monad
@@ -600,7 +652,9 @@ Implement the 'Monad' instance for our 'Secret' type.
 -}
 instance Monad (Secret e) where
     (>>=) :: Secret e a -> (a -> Secret e b) -> Secret e b
-    (>>=) = error "bind Secret: Not implemented!"
+    -- (>>=) =
+    Trap e >>= _   = Trap e
+    Reward r >>= f = f r
 
 {- |
 =⚔️= Task 7
@@ -611,6 +665,16 @@ Implement the 'Monad' instance for our lists.
   maybe a few) to flatten lists of lists to a single list.
 -}
 
+-- in hindsight, flatten is generic enough to stay at the top level
+flatten :: List (List a) -> List a
+flatten list = case list of
+  Empty     -> Empty
+  Cons x xs -> x +++ flatten xs
+
+instance Monad List where
+  (>>=) :: List a -> (a -> List b) -> List b
+  Empty >>= _ = Empty
+  l >>= f     = flatten (fmap f l)
 
 {- |
 =💣= Task 8*: Before the Final Boss
@@ -628,8 +692,28 @@ Can you implement a monad version of AND, polymorphic over any monad?
 
 🕯 HINT: Use "(>>=)", "pure" and anonymous function
 -}
+
+-- couldn't figure out how to do it without do notation below :(
+-- anyway translating the do notation and refactoring worked
 andM :: (Monad m) => m Bool -> m Bool -> m Bool
-andM = error "andM: Not implemented!"
+andM a b = a >>= \x -> if x then b else a
+
+andM2 :: (Monad m) => m Bool -> m Bool -> m Bool
+andM2 a b = do
+  x <- a
+  if x then b
+  else return False
+
+
+
+-- >>> andM2 (Just False) Nothing
+-- Just False
+
+-- >>> andM Nothing (Just False)
+-- Nothing
+
+-- >>> andM (Just True) (Just False)
+-- Just False
 
 {- |
 =🐉= Task 9*: Final Dungeon Boss
@@ -673,7 +757,37 @@ Specifically,
  ❃ Implement the function to convert Tree to list
 -}
 
+data BTree a = BTree a (Maybe (BTree a)) (Maybe (BTree a))
+instance Functor BTree where
+  fmap:: (a->b)->BTree a ->BTree b
+  fmap f (BTree v l r) = BTree (f v) (go l) (go r)
+    where go = fmap (fmap f)
 
+reverseTree :: BTree a -> BTree a
+reverseTree (BTree v l r) = BTree v right left
+    where left = fmap reverseTree l
+          right = fmap reverseTree r
+
+btreeToList :: BTree a -> [a]
+btreeToList (BTree v l r) = go l ++ v:go r
+  where go Nothing  = []
+        go (Just t) = btreeToList t
+data Tree a
+    = EmptyTree
+    | Node (Tree a) a (Tree a)
+
+instance Functor Tree where
+  fmap:: (a->b)->Tree a ->Tree b
+  fmap _ EmptyTree           = EmptyTree
+  fmap f (Node left x right) = Node (fmap f left) (f x) (fmap f right)
+
+reverseTree2 :: Tree a -> Tree a
+reverseTree2 EmptyTree           = EmptyTree
+reverseTree2 (Node left x right) = Node (reverseTree2 right) x (reverseTree2 left)
+
+treeToList :: Tree a -> [a]
+treeToList EmptyTree           = []
+treeToList (Node left x right) = treeToList left++ x : treeToList right
 {-
 You did it! Now it is time to open pull request with your changes
 and summon @vrom911 and @chshersh for the review!
