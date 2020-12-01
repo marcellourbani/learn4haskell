@@ -343,7 +343,12 @@ Define the Book product data type. You can take inspiration from our description
 of a book, but you are not limited only by the book properties we described.
 Create your own book type of your dreams!
 -}
-
+data Book = MkBook
+  { bookTitle :: String
+  ,bookAuthor :: String
+  ,bookCover  :: String
+  ,bookPages  :: Int
+  }
 {- |
 =⚔️= Task 2
 
@@ -374,6 +379,21 @@ after the fight. The battle has the following possible outcomes:
 
 -}
 
+data Knight = Knight
+ {knightHealth :: Int
+ ,knightAttack:: Int
+ ,knightGold   :: Int}
+
+data Monster = Monster
+ {monsterHealth :: Int
+ ,monsterAttack:: Int
+ ,monsterGold   :: Int}
+
+fight :: Monster -> Knight -> Int
+fight m k
+   | knightAttack k > monsterHealth m = monsterGold m
+   | monsterAttack m > knightHealth k = -1
+   | otherwise = 0
 {- |
 =🛡= Sum types
 
@@ -459,6 +479,13 @@ and provide more flexibility when working with data types.
 Create a simple enumeration for the meal types (e.g. breakfast). The one who
 comes up with the most number of names wins the challenge. Use your creativity!
 -}
+data Meal = Breakfast
+  | Brunch
+  | Lunch
+  | Snack
+  | Tea
+  | Dinner
+  | Supper
 
 {- |
 =⚔️= Task 4
@@ -479,6 +506,34 @@ After defining the city, implement the following functions:
    complicated task, walls can be built only if the city has a castle
    and at least 10 living __people__ inside in all houses of the city in total.
 -}
+data CityBuilding = Church|Library
+newtype House = House Int
+newtype CastleName = CastleName String
+data CityType = Small | Castled String | Walled String
+data City = City
+      { citytype::CityType
+      , building:: CityBuilding
+      , houses:: [House]}
+
+
+buildCastle :: City -> String -> City
+buildCastle city name = case citytype city of
+  Small -> city {citytype=Castled name}
+  Walled _ -> city {citytype=Walled name}
+  Castled _ -> city {citytype=Castled name}
+
+buildHouse:: City -> Int -> City
+buildHouse city size = city {houses = House size :houses city}
+
+buildWalls :: City -> City
+buildWalls city = case citytype city of
+  Small -> city
+  Walled _ -> city
+  Castled name
+    | population >=10 -> city {citytype=Walled name}
+    | otherwise -> city
+    where population = foldr (\(House size) pop->pop+size) 0 (houses city)
+
 
 {-
 =🛡= Newtypes
@@ -560,22 +615,30 @@ introducing extra newtypes.
 🕯 HINT: if you complete this task properly, you don't need to change the
     implementation of the "hitPlayer" function at all!
 -}
+newtype Health    = Health    Int
+newtype Armor     = Armor     Int
+newtype Attack    = Attack    Int
+newtype Dexterity = Dexterity Int
+newtype Strength  = Strength  Int
+newtype Damage    = Damage  Int
+newtype Defense   = Defense  Int
+
 data Player = Player
-    { playerHealth    :: Int
-    , playerArmor     :: Int
-    , playerAttack    :: Int
-    , playerDexterity :: Int
-    , playerStrength  :: Int
+    { playerHealth    :: Health
+    , playerArmor     :: Armor
+    , playerAttack    :: Attack
+    , playerDexterity :: Dexterity
+    , playerStrength  :: Strength 
     }
 
-calculatePlayerDamage :: Int -> Int -> Int
-calculatePlayerDamage attack strength = attack + strength
+calculatePlayerDamage :: Attack -> Strength -> Damage
+calculatePlayerDamage (Attack attack) (Strength strength) = Damage $ attack + strength
 
-calculatePlayerDefense :: Int -> Int -> Int
-calculatePlayerDefense armor dexterity = armor * dexterity
+calculatePlayerDefense :: Armor -> Dexterity -> Defense
+calculatePlayerDefense (Armor armor) (Dexterity dexterity) = Defense $ armor * dexterity
 
-calculatePlayerHit :: Int -> Int -> Int -> Int
-calculatePlayerHit damage defense health = health + defense - damage
+calculatePlayerHit :: Damage -> Defense -> Health -> Health
+calculatePlayerHit (Damage damage) (Defense defense) (Health health) = Health $ health + defense - damage
 
 -- The second player hits first player and the new first player is returned
 hitPlayer :: Player -> Player -> Player
@@ -753,7 +816,20 @@ parametrise data types in places where values can be of any general type.
   maybe-treasure ;)
 -}
 
-{-
+data TreasureChest treasure = TreasureChest 
+    { treasureChestGold :: Int
+    , treasureChestLoot :: treasure
+    }
+data Dragon p= Dragon
+  { dragonName::String
+  ,dragonPower :: p}
+
+data Lair p t = Lair 
+  {dragonInLair :: Dragon p
+  ,treasureInLair :: Maybe (TreasureChest t)
+  }
+  
+{-|
 =🛡= Typeclasses
 
 __Typeclass__ is a regularly used way to express common characteristics of
@@ -910,8 +986,20 @@ Implement instances of "Append" for the following types:
 class Append a where
     append :: a -> a -> a
 
+newtype Gold = Gold Int
 
-{-
+instance Append Gold where
+  append (Gold g) (Gold h) = Gold $ g+h
+
+instance Append [a] where
+  append = (++) 
+
+instance (Append a) => Append (Maybe a) where
+  append (Just m1) (Just m2) = Just $ append m1 m2
+  append Nothing m = m
+  append m Nothing = m
+
+{- |
 =🛡= Standard Typeclasses and Deriving
 
 As well as many useful data types, the standard library in Haskell also comes with some very
@@ -957,7 +1045,6 @@ ghci> show (Princess "Anna")
 Princess {princessName = "Anna"}
 
 -}
-
 {-
 =⚔️= Task 8
 
@@ -970,6 +1057,27 @@ implement the following functions:
 
 🕯 HINT: to implement this task, derive some standard typeclasses
 -}
+data WeekDay = 
+  Sunday
+  |Monday
+  |Tuesday
+  |Wednesday
+  |Thursday
+  |Friday
+  |Saturday deriving (Show,Read,Eq,Ord,Enum,Bounded)
+
+isWeekend::WeekDay->Bool
+isWeekend d = d == Sunday || d == Saturday 
+
+nextDay :: WeekDay->WeekDay
+nextDay d 
+  | d== maxBound = minBound
+  | otherwise = succ d
+
+daysToParty:: WeekDay->Int
+daysToParty Friday = 0
+daysToParty d = mod (fromEnum Friday - fromEnum d) 7 -- (daysToParty Saturday) == 6 -- but that's the spec
+
 
 {-
 =💣= Task 9*
@@ -1006,6 +1114,73 @@ Implement data types and typeclasses, describing such a battle between two
 contestants, and write a function that decides the outcome of a fight!
 -}
 
+class Fighter a where
+   attack :: a -> Int
+   health :: a -> Int
+   receiveAttack :: Fighter b => a -> b -> a
+
+
+data FMonster = FMonster 
+  {fmname::String
+  ,fmattack::Int
+  ,fmhealth::Int
+  } deriving (Show)
+
+instance Fighter FMonster where
+  attack = fmattack
+  health = fmhealth
+  receiveAttack a b = a {fmhealth = health a-attack b}
+
+newtype Potion = Potion Int deriving Show
+newtype Spell = Spell Int deriving Show
+
+data FKnight = FKnight 
+  {fkname::String
+  ,fkattack::Int
+  ,fkhealth::Int
+  ,fkdefence::Int
+  } deriving (Show)
+
+
+instance Fighter FKnight where
+  attack = fkattack
+  health = fkhealth
+  receiveAttack a b 
+    | hits > 0 = a {fkhealth = health a-hits}
+    | otherwise = a
+    where
+      hits = attack b - fkdefence a
+
+
+attackAction:: (Fighter a, Fighter b)=> a->b->b
+attackAction a b = receiveAttack b a
+
+runAction:: FMonster -> FMonster
+runAction = id
+
+-- should maybe keep track of potions and spells owned by the knight but I don't think adds much to the idea
+drinkPotionAction:: FKnight->Potion->FKnight
+drinkPotionAction k (Potion strength) = k {fkhealth=strength+fkhealth k}
+
+castSpellAction:: FKnight->Spell->FKnight
+castSpellAction k (Spell strength) = k {fkdefence=strength+fkdefence k}
+
+-- tried to do something like battle:: Fighter -> Fighter -> Fighter -- failed, need actual types, not typeclasses
+--                         or battle:: (Fighter a,Fighter b) => a->b->a|b -- failed, it's not typescript
+--                         or battle:: (Fighter a,Fighter b) => a->b->c -- failed, can't guess what C would be bound to
+-- I do like Either, it's the real thing
+-- would have been interesting to add run (and then either is not a solution), potions and spells, but make little sense without random numbers and demand some sort of strategy
+data FightResult attacker target =
+  AttackerWins attacker
+  |TargetWins target
+battle:: (Fighter a,Fighter b) => a->b->FightResult a b
+battle attacker target = go attacker target False
+  where
+    go a t swapped
+      | health t < 0 = AttackerWins a
+      | swapped && health a < 0 = TargetWins t
+      | swapped = go  (attackAction t a) t False
+      | otherwise = go  a (attackAction a t) True
 
 {-
 You did it! Now it is time to open pull request with your changes
